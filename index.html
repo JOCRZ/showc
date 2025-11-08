@@ -5,7 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Random Comment Viewer</title>
     <style>
-        /* CSS from the next section goes here for simplicity */
         body {
             font-family: Arial, sans-serif;
             display: flex;
@@ -19,21 +18,32 @@
         #comment-container {
             width: 80%;
             max-width: 600px;
-            padding: 20px;
-            border: 1px solid #ccc;
-            border-radius: 8px;
-            background-color: #fff;
-            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
-            text-align: center;
-            min-height: 100px;
+            margin-bottom: 20px;
             display: flex;
             align-items: center;
             justify-content: center;
-            margin-bottom: 20px;
         }
-        #comment-display {
-            font-size: 1.2em;
-            color: #333;
+        #comment-card {
+            width: 100%;
+            padding: 18px 24px;
+            border-radius: 10px;
+            background-color: #e9f0fb;
+            border: 1.5px solid #d1e2f6;
+            box-shadow: 0 2px 8px rgba(64, 112, 244, 0.06);
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+        }
+        #commentor-name {
+            font-weight: bold;
+            font-size: 1.1em;
+            color: #305caa;
+            margin-bottom: 8px;
+        }
+        #comment-text {
+            font-size: 1.04em;
+            color: #232323;
+            line-height: 1.4;
         }
         button {
             padding: 10px 15px;
@@ -57,141 +67,96 @@
 <body>
 
     <h1>💬 User Comments</h1>
-    
+
     <div id="comment-container">
-        <p id="comment-display">Loading comments...</p>
+        <div id="comment-card">
+            <div id="commentor-name">Loading...</div>
+            <div id="comment-text"></div>
+        </div>
     </div>
 
     <button id="prev-button" disabled>View Previous Comment</button>
 
     <script>
-        // JavaScript from the next section goes here
-        const commentDisplay = document.getElementById('comment-display');
+        const commentorName = document.getElementById('commentor-name');
+        const commentText = document.getElementById('comment-text');
         const prevButton = document.getElementById('prev-button');
-        const COMMENT_INTERVAL_MS = 20000; // 20 seconds
+        const COMMENT_INTERVAL_MS = 20000;
 
         let comments = [];
-        let history = []; // Stores indices of shown comments
+        let history = [];
         let intervalId;
 
-        /**
-         * 1. Load the comments from the text file
-         */
         async function loadComments() {
             try {
-                // IMPORTANT: The fetch() API requires the file to be served 
-                // from a web server (e.g., using VS Code Live Server or similar).
                 const response = await fetch('comments.txt');
                 const text = await response.text();
-                
-                // Split the text by newline characters to get an array of comments
-                // Filter out any empty strings that might result from extra newlines
-                comments = text.split('\n').map(c => c.trim()).filter(c => c.length > 0);
-
+                comments = text.split('\n').map(line => {
+                    let [commentor, ...commentParts] = line.split(':');
+                    return {
+                        commentor: commentor ? commentor.trim() : '',
+                        commentText: commentParts.join(':').trim()
+                    };
+                }).filter(c => c.commentor && c.commentText);
                 if (comments.length === 0) {
-                    commentDisplay.textContent = "No comments found in comments.txt.";
+                    commentorName.textContent = "No comments found.";
+                    commentText.textContent = "";
                     return;
                 }
-
-                // Start the automatic rotation
                 startCommentRotation();
-
             } catch (error) {
-                console.error('Error loading comments:', error);
-                commentDisplay.textContent = "Error loading comments. Make sure 'comments.txt' exists.";
+                commentorName.textContent = "Error loading comments.";
+                commentText.textContent = "Make sure 'comments.txt' exists and is accessible.";
             }
         }
 
-        /**
-         * 2. Display a random comment and manage history
-         */
         function displayRandomComment() {
             if (comments.length === 0) return;
-
-            // Generate a random index
             let randomIndex = Math.floor(Math.random() * comments.length);
-            
-            // Get the current index from history (if available) before pushing the new one
             let previousIndex = history.length > 0 ? history[history.length - 1] : -1;
-            
-            // Simple check to try and avoid showing the *exact* same comment twice in a row,
-            // though still allows repetition over time.
             while (randomIndex === previousIndex && comments.length > 1) {
                 randomIndex = Math.floor(Math.random() * comments.length);
             }
-
-            // Push the index of the newly shown comment to history
             history.push(randomIndex);
-            
-            // Keep history length manageable (e.g., last 10 comments)
-            if (history.length > 10) {
-                history.shift(); // Remove the oldest entry
-            }
-
-            // Display the comment
-            commentDisplay.textContent = comments[randomIndex];
-
-            // Update the previous button state
+            if (history.length > 10) history.shift();
+            setComment(comments[randomIndex]);
             updatePrevButtonState();
         }
 
-        /**
-         * 3. Handle the 'View Previous Comment' button click
-         */
+        function setComment(comment) {
+            commentorName.textContent = comment.commentor;
+            commentText.textContent = comment.commentText;
+        }
+
         function viewPreviousComment() {
-            if (history.length <= 1) {
-                // Should be disabled, but good to check
-                return; 
-            }
-
-            // The last entry is the currently displayed comment, so we need the one before it.
-            // Pop the current one and the one before it to get the 'previous' index
-            history.pop(); // Remove the current comment index
-            const previousIndex = history.pop(); // Get the index of the previous comment
-
+            if (history.length <= 1) return;
+            history.pop();
+            const previousIndex = history.pop();
             if (previousIndex !== undefined) {
-                 // Push it back to history (so clicking 'previous' again goes to the one before that)
-                 history.push(previousIndex);
-                 commentDisplay.textContent = comments[previousIndex];
+                history.push(previousIndex);
+                setComment(comments[previousIndex]);
             }
-            
-            // Update the button state
             updatePrevButtonState();
-
-            // Reset the interval so the 20s starts over after manual change
             resetCommentRotation();
         }
 
-        /**
-         * 4. Helper to update button state
-         */
         function updatePrevButtonState() {
-            // The button is active if there is more than 1 item in the history (i.e., we have a 'previous' one to go back to)
             prevButton.disabled = history.length <= 1;
         }
 
-        /**
-         * 5. Interval Management
-         */
         function startCommentRotation() {
-            // Display the very first comment immediately
             displayRandomComment();
-
-            // Set up the interval for subsequent comments
             intervalId = setInterval(displayRandomComment, COMMENT_INTERVAL_MS);
         }
 
         function resetCommentRotation() {
-             clearInterval(intervalId);
-             intervalId = setInterval(displayRandomComment, COMMENT_INTERVAL_MS);
+            clearInterval(intervalId);
+            intervalId = setInterval(displayRandomComment, COMMENT_INTERVAL_MS);
         }
 
-        // Attach event listener to the button
         prevButton.addEventListener('click', viewPreviousComment);
 
-        // Start the process
         loadComments();
-
     </script>
 </body>
 </html>
